@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 700 
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
@@ -17,9 +18,9 @@
  */
 handler_t *signal_action(int signum, handler_t *handler)
 {
-    struct sigaction action, old_action;
+    struct sigaction action, old_action; // Actions defined for when a new action comes in, and one to store the prev action
 
-    action.sa_handler = handler;
+    action.sa_handler = handler; // Adction has a function pointer to the handler function
     sigemptyset(&action.sa_mask); /* block sigs of type being handled */
     action.sa_flags = SA_RESTART; /* restart syscalls if possible */
 
