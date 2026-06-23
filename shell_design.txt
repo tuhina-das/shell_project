@@ -69,6 +69,12 @@ Preliminaries
     preparing your submission, other than the Linux documentation,
     course text, and lecture notes.
 
+    https://c-for-dummies.com/blog/?p=1112
+    https://www.geeksforgeeks.org/dsa/removing-trailing-newline-character-from-fgets-input/
+    https://stackoverflow.com/questions/55970169/getline-vs-fgets-control-memory-allocation
+    https://stackoverflow.com/questions/502856/whats-the-difference-between-size-t-and-int-in-c
+    
+
 
 (3) Please paste a link to your GitLab repo below.
 

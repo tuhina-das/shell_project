@@ -24,6 +24,18 @@ void handle_int() {
   return;
 }
 
+/* 
+ * Functions to handle incoming SIGUSR1 signal, utilized in sig_util.c
+ */
+void handle_kill() {
+  ssize_t bytes;
+  const int STDOUT = 1;
+  bytes = write(STDOUT, "exiting\n", 8);
+  if(bytes != 8)
+    exit(-999);
+  exit(0);
+}
+
 /*
  * First, print out the process ID of this process.
  *
@@ -47,6 +59,7 @@ int main(int argc, char **argv)
   /* Never-ending loop to print message while not killed + handle interrupt signals. */
   while(1) {
     signal_action(SIGINT, (handler_t*) (handle_int));
+    signal_action(SIGUSR1, (handler_t*) (handle_kill));
     nanosleep(time, NULL);
     fprintf(stdout, "Still here\n");
   } 

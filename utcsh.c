@@ -7,8 +7,11 @@
 /* Read the additional functions from util.h. They may be beneficial to you
 in the future */
 #include "util.h"
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#define MAX_ARGS 64
 
 /* Global variables */
 /* The array for holding shell paths. Can be edited by the functions in util.c*/
@@ -48,15 +51,60 @@ int main (int argc, char **argv)
   while (1)
     {
       printf ("%s", prompt);
-      printf ("If you see these lines, you are probably running the shell "
-              "skeleton. Exiting to prevent terminal spam.\n");
-      exit (1883);
+      // printf ("If you see these lines, you are probably running the shell "
+      //         "skeleton. Exiting to prevent terminal spam.\n");
+      // exit (1883);
 
       /* Read */
+      // There are probably two main things the user will have: a command (string, first part) and an array of args(the rest -- can include flags etc)
+      // The thing is, we can't directly look at this string and define it as a pointer. So we'll take the string and split it.
+      char* string_buffer = NULL;
+      size_t buffer_size = 0;
+      size_t characters_read = 0;
+
+      /* Question: Should we use setrlimit()? */
+      characters_read = getline(&string_buffer, &buffer_size, stdin);
+
+      // Looks at the number of letters occurring before '\n', and overwrites the target with the null terminator 
+      string_buffer[strcspn(string_buffer, "\n")] = '\0';
+      printf("%s was inputted\n", string_buffer);
+      tokenize_command_line(string_buffer);
+      
 
       /* Evaluate */
+      // Parse first token -- this is the shell command
+      char* command_keyword = strtok(string_buffer, " ");
+
+      /*DEBUG LINE*/
+      printf("Command keyword is %s\n", command_keyword);
+
+      // Rest are args -- store in an array (char*)
+      char* command_args[MAX_ARGS];
+      int argc = 0; // index to track "current" argument
+
+      char* token = strtok(NULL, " ");
+      /* Question: Is there a maximum number of arguments to parse? */
+      while (token != NULL) {
+        command_args[argc++] = token;
+        token = strtok(NULL, " ");
+      }
+      command_args[argc] = NULL;
+
+      /*DEBUG LINE -- reading each token */
+      int args_size = sizeof(command_args)/sizeof(char*);
+      for (int i = 0; i < args_size; i++) {
+        if (command_args[i] == NULL) {
+          break;
+        }
+        printf("Arg is %s\n", command_args[i]);
+      }
+
+      
+      
+      exit (1883);
 
       /* Print (optional) */
+      // Depends on the command. If the command requires it, then do so. We're likely matching functions/function ptrs here.
     }
   return 0;
 }
@@ -73,7 +121,8 @@ with your own implementation. */
  */
 char **tokenize_command_line (char *cmdline)
 {
-  (void) cmdline;
+  int input_size = strlen(cmdline);
+  printf("String size is %d\n", input_size);
   return NULL;
 }
 
