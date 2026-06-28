@@ -10,14 +10,20 @@ in the future */
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#define MAX_ARGS 64
+#include <unistd.h>
 
 /* Global variables */
 /* The array for holding shell paths. Can be edited by the functions in util.c*/
 char shell_paths[MAX_ENTRIES_IN_SHELLPATH][MAX_CHARS_PER_CMDLINE];
 static char prompt[] = "utcsh> "; /* Command line prompt */
 static char *default_shell_path[2] = {"/bin", NULL};
+
+#define MAX_ARGS 64
+
+// Would this get design points off?
+char* current_command_args[MAX_ARGS] = { NULL }; // nice sexy global array to help track tokens
+int SHELL_ARGC = 0;
+
 /* End Global Variables */
 
 /* Convenience struct for describing a command. Modify this struct as you see
@@ -30,11 +36,14 @@ struct Command
 
 /* Here are the functions we recommend you implement */
 
-char **tokenize_command_line (char *cmdline);
-struct Command parse_command (char **tokens);
-void eval (struct Command *cmd);
+void tokenize_command_line (char *cmdline);
+struct Command parse_command ();
+void eval (struct Command cmd);
 int try_exec_builtin (struct Command *cmd);
 void exec_external_cmd (struct Command *cmd);
+
+/* Here are the functions used for testing */
+void print_command(struct Command cmd);
 
 /* Main REPL: read, evaluate, and print. This function should remain relatively
    short: if it grows beyond 60 lines, you're doing too much in main() and
@@ -50,10 +59,11 @@ int main (int argc, char **argv)
 
   while (1)
     {
+      // Before anything else, reinitialize global array to all nulls?
+      SHELL_ARGC = 0;
+      memset(current_command_args, NULL, MAX_ARGS); 
+
       printf ("%s", prompt);
-      // printf ("If you see these lines, you are probably running the shell "
-      //         "skeleton. Exiting to prevent terminal spam.\n");
-      // exit (1883);
 
       /* Read */
       // There are probably two main things the user will have: a command (string, first part) and an array of args(the rest -- can include flags etc)
@@ -64,44 +74,18 @@ int main (int argc, char **argv)
 
       /* Question: Should we use setrlimit()? */
       characters_read = getline(&string_buffer, &buffer_size, stdin);
-
       // Looks at the number of letters occurring before '\n', and overwrites the target with the null terminator 
       string_buffer[strcspn(string_buffer, "\n")] = '\0';
-      printf("%s was inputted\n", string_buffer);
       tokenize_command_line(string_buffer);
-      
+      struct Command current_command = parse_command();
+
+      /* Debug purposes */
+      // print_command(current_command);
 
       /* Evaluate */
-      // Parse first token -- this is the shell command
-      char* command_keyword = strtok(string_buffer, " ");
-
-      /*DEBUG LINE*/
-      printf("Command keyword is %s\n", command_keyword);
-
-      // Rest are args -- store in an array (char*)
-      char* command_args[MAX_ARGS];
-      int argc = 0; // index to track "current" argument
-
-      char* token = strtok(NULL, " ");
-      /* Question: Is there a maximum number of arguments to parse? */
-      while (token != NULL) {
-        command_args[argc++] = token;
-        token = strtok(NULL, " ");
-      }
-      command_args[argc] = NULL;
-
-      /*DEBUG LINE -- reading each token */
-      int args_size = sizeof(command_args)/sizeof(char*);
-      for (int i = 0; i < args_size; i++) {
-        if (command_args[i] == NULL) {
-          break;
-        }
-        printf("Arg is %s\n", command_args[i]);
-      }
-
+      eval(current_command);
       
-      
-      exit (1883);
+
 
       /* Print (optional) */
       // Depends on the command. If the command requires it, then do so. We're likely matching functions/function ptrs here.
@@ -119,11 +103,19 @@ with your own implementation. */
  * much easier to process. First, you should figure out how many arguments you
  * have, then allocate a char** of sufficient size and fill it using strtok()
  */
-char **tokenize_command_line (char *cmdline)
+void tokenize_command_line (char *cmdline)
 {
-  int input_size = strlen(cmdline);
-  printf("String size is %d\n", input_size);
-  return NULL;
+  /* Question: Does sufficient mean extra space would result in a deduction of points? */
+
+  char* token = strtok(cmdline, " ");
+
+  while (token != NULL) {
+    current_command_args[SHELL_ARGC++] = token;
+    token = strtok(NULL, " ");
+  }
+  current_command_args[SHELL_ARGC] = NULL;
+
+  // printf("Number of args is %d\n", argc); //debug
 }
 
 /** Turn tokens into a command.
@@ -133,20 +125,71 @@ char **tokenize_command_line (char *cmdline)
  * it. This function takes a sequence of tokens and turns them into a struct
  * Command.
  */
-struct Command parse_command (char **tokens)
+struct Command parse_command ()
 {
-  struct Command dummy = {.args = tokens, .outputFile = NULL};
-  return dummy;
+  struct Command command = {.args = current_command_args, .outputFile = NULL};
+  bool output_symbol_found_once = false;
+
+  // How do we find an output file? --> Go through tokens and look for ">" -- token following that is output file
+  for (int arg_i = 0; arg_i < SHELL_ARGC; arg_i++) {
+    // Case carrot (>) already found
+    if (output_symbol_found_once) {
+      if (current_command_args[arg_i] == NULL || current_command_args[arg_i] == '>') {
+        // Error case.
+      } else {
+        command.outputFile = current_command_args[arg_i];
+      }
+    } else {
+      if (current_command_args[arg_i][0] == '>') {
+        output_symbol_found_once = true;
+      }
+    }
+  }
+
+  return command;
 }
+
 
 /** Evaluate a single command
  *
  * Both built-ins and external commands can be passed to this function--it
  * should work out what the correct type is and take the appropriate action.
  */
-void eval (struct Command *cmd)
+void eval (struct Command cmd)
 {
-  (void) cmd;
+  // Commands: exit, cd and path
+  /* First command of interest: exit */
+  char* keyword = cmd.args[0];
+  if (strcmp(keyword, "exit") == 0) {
+    if (SHELL_ARGC > 1) {
+      print_error(0);
+      exit(-1);
+    }
+
+    printf("Exiting...\n");
+    exit(0);
+  } else if (strcmp(keyword, "cd") == 0) {
+    if (SHELL_ARGC > 2) {
+      print_error(1);
+      exit(-1);
+    }
+
+    printf("Changing directory...\n");
+    int success = chdir(cmd.args[1]);
+    if (success != 0) {
+      print_error(2);
+      exit(-1);
+    }
+  } else if (strcmp(keyword, "path") == 0) {
+    // Note: path will never error out
+    char cwd[MAX_CHARS_PER_CMDLINE];
+    printf("Current directory: %s\n", getcwd(cwd, sizeof(cwd)));
+    
+  } else {
+    print_error(-1);
+    exit(-1);
+  }
+
   return;
 }
 
@@ -157,7 +200,6 @@ void eval (struct Command *cmd)
  */
 int try_exec_builtin (struct Command *cmd)
 {
-  (void) cmd;
   return 0;
 }
 
@@ -170,4 +212,41 @@ void exec_external_cmd (struct Command *cmd)
 {
   (void) cmd;
   return;
+}
+
+void print_error(int error_type) {
+  // TODO -- check if this is a valid setup for errors bc its lowk cursed
+  char* emsg; 
+
+  if (error_type == 0) {
+    emsg = "An error has occurred: exit call may not have arguments\n";
+  } else if (error_type == 1) {
+    emsg = "An error has occurred: wrong number of arguments for cd\n";
+  } else if (error_type == 2){
+    emsg = "An error has occurred: chdir() failed\n";
+  } else {
+    emsg = "An error has occurred: unspecified command\n";
+  }
+
+  int nbytes_written = write(STDERR_FILENO, emsg, strlen(emsg));
+  if(nbytes_written != (int)strlen(emsg)){
+    exit(2);  // Shouldn't really happen -- if it does, error is unrecoverable
+  }
+}
+
+/* NOTE: The below functions are for debugging during development. 
+They can be removed once this project is completed, though it might be helpful
+to keep them. */
+
+/** 
+ * Print a command to see its contents.
+ */
+void print_command(struct Command cmd) {
+  printf("--------- Current command info for debugging ---------\n");
+  printf("Number of args: %i\n", SHELL_ARGC);
+  printf("Command args: ");
+  for (int i = 0; i < SHELL_ARGC; i++) {
+    printf("%s ", cmd.args[i]);
+  }
+  printf("\nOutput file, if any: %s\n", cmd.outputFile);
 }
