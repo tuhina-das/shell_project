@@ -11,6 +11,7 @@ in the future */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
 
 /* Global variables */
 /* The array for holding shell paths. Can be edited by the functions in util.c*/
@@ -40,7 +41,7 @@ void tokenize_command_line (char *cmdline);
 struct Command parse_command ();
 void eval (struct Command cmd);
 int try_exec_builtin (struct Command *cmd);
-void exec_external_cmd (struct Command *cmd);
+void exec_external_cmd (struct Command cmd);
 
 /* Here are the functions used for testing */
 void print_command(struct Command cmd);
@@ -50,7 +51,7 @@ void print_command(struct Command cmd);
    should try to move some of that work into other functions. */
 int main (int argc, char **argv)
 {
-  set_shell_path (default_shell_path);
+  set_shell_path(default_shell_path);
 
   /* These two lines are just here to suppress certain warnings. You should
    * delete them when you implement Part 1.4 */
@@ -182,12 +183,11 @@ void eval (struct Command cmd)
     }
   } else if (strcmp(keyword, "path") == 0) {
     // Note: path will never error out
-    char cwd[MAX_CHARS_PER_CMDLINE];
-    printf("Current directory: %s\n", getcwd(cwd, sizeof(cwd)));
-    
+    // char cwd[MAX_CHARS_PER_CMDLINE];
+    // printf("Current directory: %s\n", getcwd(cwd, sizeof(cwd)));
   } else {
-    print_error(-1);
-    exit(-1);
+    /* Assume it is an external command */
+    exec_external_cmd(cmd);
   }
 
   return;
@@ -208,14 +208,28 @@ int try_exec_builtin (struct Command *cmd)
  * Execute an external command by fork-and-exec. Should also take care of
  * output redirection, if any is requested
  */
-void exec_external_cmd (struct Command *cmd)
+void exec_external_cmd (struct Command cmd)
 {
-  (void) cmd;
+  char* keyword = cmd.args[0];
+  pid_t pid = fork();
+    if (pid == 0) {
+      /* If child, use execv() to 'turn into' a different process */
+      execv(keyword, cmd.args);
+
+      // If the exec fails, we will reach the below code. 
+      // At this point, we've reached an error and need to handle it.
+      //TODO: why doesn't this exit properly?
+      print_error(-1);
+      exit(-1);
+  } else {
+      /* Otherwise, wait for the child to finish */
+      waitpid(pid, NULL, 0);
+  }
   return;
 }
 
 void print_error(int error_type) {
-  // TODO -- check if this is a valid setup for errors bc its lowk cursed
+  // TODO -- check if this is a valid setup for errors (style-wise) bc its lowk cursed
   char* emsg; 
 
   if (error_type == 0) {
@@ -225,7 +239,8 @@ void print_error(int error_type) {
   } else if (error_type == 2){
     emsg = "An error has occurred: chdir() failed\n";
   } else {
-    emsg = "An error has occurred: unspecified command\n";
+    /* Unrecognized and therefore external command - fork and exec */
+    emsg = "An error has occurred: unspecified command\n"; //TODO delete
   }
 
   int nbytes_written = write(STDERR_FILENO, emsg, strlen(emsg));
