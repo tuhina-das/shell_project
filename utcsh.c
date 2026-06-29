@@ -1,7 +1,7 @@
 /*
   utcsh - The UTCS Shell
 
-  <Put your name and CS login ID here>
+  Tuhina, tuhina
 */
 
 /* Read the additional functions from util.h. They may be beneficial to you
@@ -19,11 +19,16 @@ char shell_paths[MAX_ENTRIES_IN_SHELLPATH][MAX_CHARS_PER_CMDLINE];
 static char prompt[] = "utcsh> "; /* Command line prompt */
 static char *default_shell_path[2] = {"/bin", NULL};
 
+/* The maximum number of arguments that a Command can hold */
 #define MAX_ARGS 64
 
+/* The current parsed Command's arguments, and number of args */
 // Would this get design points off?
 char* current_command_args[MAX_ARGS] = { NULL }; // nice sexy global array to help track tokens
 int SHELL_ARGC = 0;
+
+/* Variable tracking shell mode */
+bool IN_SHELL_MODE = false;
 
 /* End Global Variables */
 
@@ -51,46 +56,113 @@ void print_command(struct Command cmd);
    should try to move some of that work into other functions. */
 int main (int argc, char **argv)
 {
-  set_shell_path(default_shell_path);
-
-  /* These two lines are just here to suppress certain warnings. You should
-   * delete them when you implement Part 1.4 */
-  (void) argc;
-  (void) argv;
-
-  while (1)
-    {
-      // Before anything else, reinitialize global array to all nulls?
+  /* CASE NOT SHELL MODE */
+  if (argc == 1) { 
+    /* Loop while exit/error is not occurring */
+    while (1) {
+      /* RESET + READ COMMAND */
       SHELL_ARGC = 0;
       memset(current_command_args, NULL, MAX_ARGS); 
-
       printf ("%s", prompt);
-
-      /* Read */
-      // There are probably two main things the user will have: a command (string, first part) and an array of args(the rest -- can include flags etc)
-      // The thing is, we can't directly look at this string and define it as a pointer. So we'll take the string and split it.
+      
       char* string_buffer = NULL;
       size_t buffer_size = 0;
       size_t characters_read = 0;
 
       /* Question: Should we use setrlimit()? */
       characters_read = getline(&string_buffer, &buffer_size, stdin);
-      // Looks at the number of letters occurring before '\n', and overwrites the target with the null terminator 
+
+      // Overwrite '\n' with null terminator 
       string_buffer[strcspn(string_buffer, "\n")] = '\0';
       tokenize_command_line(string_buffer);
       struct Command current_command = parse_command();
 
-      /* Debug purposes */
-      // print_command(current_command);
-
-      /* Evaluate */
+      /* EVAL COMMAND */
       eval(current_command);
-      
-
 
       /* Print (optional) */
       // Depends on the command. If the command requires it, then do so. We're likely matching functions/function ptrs here.
     }
+
+  } else if (argc == 2) { // CASE SHELL MODE
+    /* INITIALIZE LOOP START */
+    memset(current_command_args, NULL, MAX_ARGS); 
+    char* string_buffer = NULL;
+    size_t buffer_size = 0;
+    size_t characters_read = 0;
+
+    FILE* file_stream = fopen(argv[1], "r");
+    if (file_stream == NULL) {
+      // Stream failed, throw an error 
+      printf("A fuckin error\n");
+    } 
+
+    // characters_read = getline(&string_buffer, &buffer_size, file_stream);
+    while (characters_read = getline(&string_buffer, &buffer_size, file_stream) != -1) {
+
+      string_buffer[strcspn(string_buffer, "\n")] = '\0';
+      tokenize_command_line(string_buffer);
+      struct Command current_command = parse_command();
+
+      /* Evaluate */
+      eval(current_command);
+
+      /* RESET */
+      SHELL_ARGC = 0;
+      memset(current_command_args, NULL, MAX_ARGS); 
+      char* string_buffer = NULL;
+      size_t buffer_size = 0;
+      size_t characters_read = 0;
+    }
+
+  } else { // CASE ERROR
+    print_error(-1);
+    exit(-1);
+  }
+
+  // while (1)
+  //   {
+  //     // Before anything else, reinitialize global array to all nulls?
+  //     SHELL_ARGC = 0;
+  //     memset(current_command_args, NULL, MAX_ARGS); 
+
+  //     printf ("%s", prompt);
+      
+  //     /* Read */
+  //     // There are probably two main things the user will have: a command (string, first part) and an array of args(the rest -- can include flags etc)
+  //     // The thing is, we can't directly look at this string and define it as a pointer. So we'll take the string and split it.
+  //     char* string_buffer = NULL;
+  //     size_t buffer_size = 0;
+  //     size_t characters_read = 0;
+
+  //     /* Question: Should we use setrlimit()? */
+  //     if (!IN_SHELL_MODE) {
+  //       characters_read = getline(&string_buffer, &buffer_size, stdin);
+  //       // Looks at the number of letters occurring before '\n', and overwrites the target with the null terminator 
+  //       string_buffer[strcspn(string_buffer, "\n")] = '\0';
+  //       tokenize_command_line(string_buffer);
+  //       struct Command current_command = parse_command();
+  //       /* Evaluate */
+  //       eval(current_command);
+  //     } else {
+  //       FILE* file_stream = fopen(argv[1], "r");
+  //       if (file_stream == NULL) {
+  //         /* Stream failed, throw an error */
+  //         printf("A fuckin error\n");
+  //       } 
+
+  //       characters_read = getline(&string_buffer, &buffer_size, file_stream);
+  //       while (characters_read != -1) {
+  //         string_buffer[strcspn(string_buffer, "\n")] = '\0';
+  //         tokenize_command_line(string_buffer);
+  //         struct Command current_command = parse_command();
+  //         /* Evaluate */
+  //         eval(current_command);
+  //       }
+  //     }
+  //     /* Print (optional) */
+  //     // Depends on the command. If the command requires it, then do so. We're likely matching functions/function ptrs here.
+  //   }
   return 0;
 }
 
@@ -166,8 +238,6 @@ void eval (struct Command cmd)
       print_error(0);
       exit(-1);
     }
-
-    printf("Exiting...\n");
     exit(0);
   } else if (strcmp(keyword, "cd") == 0) {
     if (SHELL_ARGC > 2) {
@@ -214,7 +284,7 @@ void exec_external_cmd (struct Command cmd)
   pid_t pid = fork();
     if (pid == 0) {
       /* If child, use execv() to 'turn into' a different process */
-      execv(keyword, cmd.args);
+      int result = execv(keyword, cmd.args);
 
       // If the exec fails, we will reach the below code. 
       // At this point, we've reached an error and need to handle it.
