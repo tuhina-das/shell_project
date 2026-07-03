@@ -56,7 +56,7 @@ void print_command(struct Command cmd);
    should try to move some of that work into other functions. */
 int main (int argc, char **argv)
 {
-  /* CASE NOT SHELL MODE */
+  /* CASE NOT SCRIPT MODE */
   if (argc == 1) { 
     /* Loop while exit/error is not occurring */
     while (1) {
@@ -74,7 +74,14 @@ int main (int argc, char **argv)
 
       // Overwrite '\n' with null terminator 
       string_buffer[strcspn(string_buffer, "\n")] = '\0';
+
       tokenize_command_line(string_buffer);
+      
+      /* Continue REPL if newline character is entered */
+      if (SHELL_ARGC == 0) {
+        continue;
+      }
+
       struct Command current_command = parse_command();
 
       /* EVAL COMMAND */
@@ -84,7 +91,7 @@ int main (int argc, char **argv)
       // Depends on the command. If the command requires it, then do so. We're likely matching functions/function ptrs here.
     }
 
-  } else if (argc == 2) { // CASE SHELL MODE
+  } else if (argc == 2) { /* CASE SCRIPT MODE */
     /* INITIALIZE LOOP START */
     memset(current_command_args, NULL, MAX_ARGS); 
     char* string_buffer = NULL;
@@ -93,19 +100,31 @@ int main (int argc, char **argv)
 
     FILE* file_stream = fopen(argv[1], "r");
     if (file_stream == NULL) {
-      // Stream failed, throw an error 
-      printf("A fuckin error\n");
+      print_error(6767676);
+      exit(1);
     } 
 
     // characters_read = getline(&string_buffer, &buffer_size, file_stream);
-    while (characters_read = getline(&string_buffer, &buffer_size, file_stream) != -1) {
+    while ((characters_read = getline(&string_buffer, &buffer_size, file_stream)) != -1) {
 
       string_buffer[strcspn(string_buffer, "\n")] = '\0';
       tokenize_command_line(string_buffer);
+
+      /* Continue REPL if newline character is entered */
+      if (SHELL_ARGC == 0) {
+        continue;
+      }
+
       struct Command current_command = parse_command();
 
       /* Evaluate */
       eval(current_command);
+
+      /* Quick check after read loop to determine if file was valid */
+      if (SHELL_ARGC == 0) {
+        print_error(67);
+        exit(1);
+      }
 
       /* RESET */
       SHELL_ARGC = 0;
@@ -117,52 +136,9 @@ int main (int argc, char **argv)
 
   } else { // CASE ERROR
     print_error(-1);
-    exit(-1);
+    exit(1);
   }
 
-  // while (1)
-  //   {
-  //     // Before anything else, reinitialize global array to all nulls?
-  //     SHELL_ARGC = 0;
-  //     memset(current_command_args, NULL, MAX_ARGS); 
-
-  //     printf ("%s", prompt);
-      
-  //     /* Read */
-  //     // There are probably two main things the user will have: a command (string, first part) and an array of args(the rest -- can include flags etc)
-  //     // The thing is, we can't directly look at this string and define it as a pointer. So we'll take the string and split it.
-  //     char* string_buffer = NULL;
-  //     size_t buffer_size = 0;
-  //     size_t characters_read = 0;
-
-  //     /* Question: Should we use setrlimit()? */
-  //     if (!IN_SHELL_MODE) {
-  //       characters_read = getline(&string_buffer, &buffer_size, stdin);
-  //       // Looks at the number of letters occurring before '\n', and overwrites the target with the null terminator 
-  //       string_buffer[strcspn(string_buffer, "\n")] = '\0';
-  //       tokenize_command_line(string_buffer);
-  //       struct Command current_command = parse_command();
-  //       /* Evaluate */
-  //       eval(current_command);
-  //     } else {
-  //       FILE* file_stream = fopen(argv[1], "r");
-  //       if (file_stream == NULL) {
-  //         /* Stream failed, throw an error */
-  //         printf("A fuckin error\n");
-  //       } 
-
-  //       characters_read = getline(&string_buffer, &buffer_size, file_stream);
-  //       while (characters_read != -1) {
-  //         string_buffer[strcspn(string_buffer, "\n")] = '\0';
-  //         tokenize_command_line(string_buffer);
-  //         struct Command current_command = parse_command();
-  //         /* Evaluate */
-  //         eval(current_command);
-  //       }
-  //     }
-  //     /* Print (optional) */
-  //     // Depends on the command. If the command requires it, then do so. We're likely matching functions/function ptrs here.
-  //   }
   return 0;
 }
 
@@ -180,11 +156,11 @@ void tokenize_command_line (char *cmdline)
 {
   /* Question: Does sufficient mean extra space would result in a deduction of points? */
 
-  char* token = strtok(cmdline, " ");
+  char* token = strtok(cmdline, " \t");
 
   while (token != NULL) {
     current_command_args[SHELL_ARGC++] = token;
-    token = strtok(NULL, " ");
+    token = strtok(NULL, " \t");
   }
   current_command_args[SHELL_ARGC] = NULL;
 
@@ -236,20 +212,20 @@ void eval (struct Command cmd)
   if (strcmp(keyword, "exit") == 0) {
     if (SHELL_ARGC > 1) {
       print_error(0);
-      exit(-1);
+      return;
     }
     exit(0);
   } else if (strcmp(keyword, "cd") == 0) {
-    if (SHELL_ARGC > 2) {
+    if (SHELL_ARGC != 2) {
       print_error(1);
-      exit(-1);
+      return;
     }
 
-    printf("Changing directory...\n");
+    // printf("Changing directory...\n");
     int success = chdir(cmd.args[1]);
     if (success != 0) {
       print_error(2);
-      exit(-1);
+      return;
     }
   } else if (strcmp(keyword, "path") == 0) {
     // Note: path will never error out
@@ -290,7 +266,7 @@ void exec_external_cmd (struct Command cmd)
       // At this point, we've reached an error and need to handle it.
       //TODO: why doesn't this exit properly?
       print_error(-1);
-      exit(-1);
+      exit(1);
   } else {
       /* Otherwise, wait for the child to finish */
       waitpid(pid, NULL, 0);
@@ -299,20 +275,7 @@ void exec_external_cmd (struct Command cmd)
 }
 
 void print_error(int error_type) {
-  // TODO -- check if this is a valid setup for errors (style-wise) bc its lowk cursed
-  char* emsg; 
-
-  if (error_type == 0) {
-    emsg = "An error has occurred: exit call may not have arguments\n";
-  } else if (error_type == 1) {
-    emsg = "An error has occurred: wrong number of arguments for cd\n";
-  } else if (error_type == 2){
-    emsg = "An error has occurred: chdir() failed\n";
-  } else {
-    /* Unrecognized and therefore external command - fork and exec */
-    emsg = "An error has occurred: unspecified command\n"; //TODO delete
-  }
-
+  char* emsg = "An error has occurred\n";
   int nbytes_written = write(STDERR_FILENO, emsg, strlen(emsg));
   if(nbytes_written != (int)strlen(emsg)){
     exit(2);  // Shouldn't really happen -- if it does, error is unrecoverable
