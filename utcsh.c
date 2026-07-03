@@ -104,6 +104,16 @@ int main (int argc, char **argv)
       exit(1);
     } 
 
+    /* Quick check for invalid files */
+    // TODO: nts that I lowkey don't full get this procedure.
+    fseek(file_stream, 0, SEEK_END);
+    int size = ftell(file_stream);
+    if (size == 0) {
+        print_error(-1);
+        exit(1);
+    }
+    fseek(file_stream, 0, SEEK_SET);  
+
     // characters_read = getline(&string_buffer, &buffer_size, file_stream);
     while ((characters_read = getline(&string_buffer, &buffer_size, file_stream)) != -1) {
 

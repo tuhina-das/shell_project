@@ -75,6 +75,7 @@ Preliminaries
     https://stackoverflow.com/questions/502856/whats-the-difference-between-size-t-and-int-in-c
     https://www.geeksforgeeks.org/c/c-file-io/
     https://stackoverflow.com/questions/3501338/c-read-file-line-by-line
+    https://man7.org/linux/man-pages/man3/fseek.3.html
 
 (3) Please paste a link to your GitLab repo below.
 
