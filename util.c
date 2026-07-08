@@ -20,7 +20,7 @@
 extern char shell_paths[MAX_ENTRIES_IN_SHELLPATH][MAX_CHARS_PER_CMDLINE];
 
 /* Should the UTCSH internal functions dump verbose output? */
-static int utcsh_internal_verbose = 0;
+static int utcsh_internal_verbose = 0; 
 
 void maybe_print_error ()
 {

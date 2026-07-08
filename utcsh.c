@@ -56,6 +56,8 @@ void print_command(struct Command cmd);
    should try to move some of that work into other functions. */
 int main (int argc, char **argv)
 {
+  set_shell_path(default_shell_path);
+
   /* CASE NOT SCRIPT MODE */
   if (argc == 1) { 
     /* Loop while exit/error is not occurring */
@@ -129,12 +131,6 @@ int main (int argc, char **argv)
 
       /* Evaluate */
       eval(current_command);
-
-      /* Quick check after read loop to determine if file was valid */
-      if (SHELL_ARGC == 0) {
-        print_error(67);
-        exit(1);
-      }
 
       /* RESET */
       SHELL_ARGC = 0;
@@ -241,6 +237,7 @@ void eval (struct Command cmd)
     // Note: path will never error out
     // char cwd[MAX_CHARS_PER_CMDLINE];
     // printf("Current directory: %s\n", getcwd(cwd, sizeof(cwd)));
+    set_shell_path(cmd.args + 1);
   } else {
     /* Assume it is an external command */
     exec_external_cmd(cmd);
@@ -266,21 +263,59 @@ int try_exec_builtin (struct Command *cmd)
  */
 void exec_external_cmd (struct Command cmd)
 {
+  //todo remove later: PATH: a set of user-specified directories to search for external programs
+  /* Decide if command is absolute path or not */
+  bool is_absolute = is_absolute_path(cmd.args[0]);
   char* keyword = cmd.args[0];
-  pid_t pid = fork();
+
+  /* If absolute, just call execv as usual */
+  /* TODO fix for efficiency/style */
+  if (is_absolute) {
+    pid_t pid = fork();
     if (pid == 0) {
       /* If child, use execv() to 'turn into' a different process */
       int result = execv(keyword, cmd.args);
 
       // If the exec fails, we will reach the below code. 
       // At this point, we've reached an error and need to handle it.
-      //TODO: why doesn't this exit properly?
       print_error(-1);
       exit(1);
+    } else {
+        /* Otherwise, wait for the child to finish */
+        waitpid(pid, NULL, 0);
+        return;
+    }
   } else {
-      /* Otherwise, wait for the child to finish */
-      waitpid(pid, NULL, 0);
+  /* Else, search PATH (list of directories) */
+  char* exec_path;
+  for (int i = 0; i < MAX_ENTRIES_IN_SHELLPATH; i++) {
+    // pick a path
+    char* current_path = shell_paths[i];
+
+    if (current_path[0] == '\0') {
+      break;
+    }
+
+    // use exe_exists_in_dir to see if we can execute it or not
+    exec_path = exe_exists_in_dir(current_path, keyword, false);
+    if (exec_path) {
+      pid_t pid = fork();
+      if (pid == 0) {
+        int result = execv(exec_path, cmd.args);
+
+        free(exec_path);
+        print_error(-1);
+        exit(1);
+      } else {
+        waitpid(pid, NULL, 0);
+        return;
+      }
+    }
+
   }
+  }
+
+  print_error(1);
   return;
 }
 
