@@ -38,6 +38,7 @@ struct Command
 {
   char **args;      /* Argument array for the command */
   char *outputFile; /* Redirect target for file (NULL means no redirect) */
+  bool hasError;
 };
 
 /* Here are the functions we recommend you implement */
@@ -85,6 +86,11 @@ int main (int argc, char **argv)
       }
 
       struct Command current_command = parse_command();
+
+      if (current_command.hasError) {
+        print_error(-1);
+        continue;
+      }
 
       /* EVAL COMMAND */
       eval(current_command);
@@ -182,23 +188,30 @@ void tokenize_command_line (char *cmdline)
  */
 struct Command parse_command ()
 {
-  struct Command command = {.args = current_command_args, .outputFile = NULL};
-  bool output_symbol_found_once = false;
+  struct Command command = {.args = current_command_args, \
+    .outputFile = NULL, .hasError = false};
 
-  // How do we find an output file? --> Go through tokens and look for ">" -- token following that is output file
+  /* Loop through tokens and check for errors */
+  int output_count = 0;
   for (int arg_i = 0; arg_i < SHELL_ARGC; arg_i++) {
-    // Case carrot (>) already found
-    if (output_symbol_found_once) {
-      if (current_command_args[arg_i] == NULL || current_command_args[arg_i] == '>') {
-        // Error case.
-      } else {
-        command.outputFile = current_command_args[arg_i];
+    if (strchr(current_command_args[arg_i], '>') != -1) {
+      output_count++;
+
+      /* Do immediate error checks */
+      if (sizeof(current_command_args[arg_i] != 1) || \
+      arg_i == SHELL_ARGC - 1 || \
+      arg_i == 0) {
+        command.hasError = true;
+        continue;
       }
-    } else {
-      if (current_command_args[arg_i][0] == '>') {
-        output_symbol_found_once = true;
-      }
+
+      /* Define output */
+      command.outputFile = current_command_args[arg_i + 1];
     }
+  }
+
+  if (output_count > 1) {
+    command.hasError;
   }
 
   return command;
