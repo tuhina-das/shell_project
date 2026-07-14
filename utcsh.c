@@ -7,6 +7,7 @@
 /* Read the additional functions from util.h. They may be beneficial to you
 in the future */
 #include "util.h"
+#include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,11 +87,6 @@ int main (int argc, char **argv)
       }
 
       struct Command current_command = parse_command();
-
-      if (current_command.hasError) {
-        print_error(-1);
-        continue;
-      }
 
       /* EVAL COMMAND */
       eval(current_command);
@@ -194,24 +190,23 @@ struct Command parse_command ()
   /* Loop through tokens and check for errors */
   int output_count = 0;
   for (int arg_i = 0; arg_i < SHELL_ARGC; arg_i++) {
-    if (strchr(current_command_args[arg_i], '>') != -1) {
+    if (current_command_args[arg_i][0] == '>') {
       output_count++;
 
       /* Do immediate error checks */
-      if (sizeof(current_command_args[arg_i] != 1) || \
-      arg_i == SHELL_ARGC - 1 || \
-      arg_i == 0) {
+      if (arg_i == SHELL_ARGC - 1 || arg_i == 0 || current_command_args[arg_i + 2]) {
         command.hasError = true;
         continue;
       }
 
-      /* Define output */
+      /* Define output and null-terminate it */
       command.outputFile = current_command_args[arg_i + 1];
+      current_command_args[arg_i] = NULL;
     }
   }
 
   if (output_count > 1) {
-    command.hasError;
+    command.hasError = true;
   }
 
   return command;
@@ -225,6 +220,10 @@ struct Command parse_command ()
  */
 void eval (struct Command cmd)
 {
+  if (cmd.hasError) {
+    print_error(-1);
+    return;
+  }
   // Commands: exit, cd and path
   /* First command of interest: exit */
   char* keyword = cmd.args[0];
@@ -286,6 +285,13 @@ void exec_external_cmd (struct Command cmd)
   if (is_absolute) {
     pid_t pid = fork();
     if (pid == 0) {
+      /* If cmd output exists, redirect that output to that file */
+      // printf("Command output not null? ---> %s", cmd.outputFile != NULL);
+      if (cmd.outputFile) {
+        int output_descriptor = open(cmd.outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        dup2(output_descriptor, 1);
+      }
+
       /* If child, use execv() to 'turn into' a different process */
       int result = execv(keyword, cmd.args);
 
@@ -314,6 +320,11 @@ void exec_external_cmd (struct Command cmd)
     if (exec_path) {
       pid_t pid = fork();
       if (pid == 0) {
+        if (cmd.outputFile) {
+          int output_descriptor = open(cmd.outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          dup2(output_descriptor, 1);
+        }
+        
         int result = execv(exec_path, cmd.args);
 
         free(exec_path);
